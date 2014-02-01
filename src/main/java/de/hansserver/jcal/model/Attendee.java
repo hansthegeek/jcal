@@ -10,24 +10,22 @@ import net.fortuna.ical4j.model.parameter.Cn;
  *
  * @author Raphael Esterle
  */
-public class Attendee extends net.fortuna.ical4j.model.property.Attendee{
+public class Attendee {
     
     private final String name;
     private final String mail;
     
     public Attendee(String mail, String name) {
-        super(URI.create("mailto:"+mail));
-        getParameters().add(new Cn(name));
         this.mail=mail;
         this.name=name;
     }
 
-    public String getMail() {
+    public final String getMail() {
         return mail;
     }
 
-    public static String getNAME() {
-        return NAME;
+    public final String getName() {
+        return name;
     }
     
 }
