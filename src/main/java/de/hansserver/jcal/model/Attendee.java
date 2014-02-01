@@ -3,26 +3,31 @@
  */
 package de.hansserver.jcal.model;
 
+import java.net.URI;
+import net.fortuna.ical4j.model.parameter.Cn;
+
 /**
  *
  * @author Raphael Esterle
  */
-public class Attendee {
+public class Attendee extends net.fortuna.ical4j.model.property.Attendee{
     
-    private final String mailto;
     private final String name;
+    private final String mail;
+    
+    public Attendee(String mail, String name) {
+        super(URI.create("mailto:"+mail));
+        getParameters().add(new Cn(name));
+        this.mail=mail;
+        this.name=name;
+    }
 
-    public Attendee(String mailto, String name) {
-        this.mailto = mailto;
-        this.name = name;
+    public String getMail() {
+        return mail;
     }
-    
-    public String getMail(){
-        return mailto;
-    }
-    
-    public String getName(){
-        return name;
+
+    public static String getNAME() {
+        return NAME;
     }
     
 }
