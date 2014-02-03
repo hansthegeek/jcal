@@ -4,7 +4,7 @@
 package de.hansserver.jcal.model;
 
 import java.net.URI;
-import net.fortuna.ical4j.model.parameter.Cn;
+import net.fortuna.ical4j.model.parameter.PartStat;
 
 /**
  *
@@ -12,15 +12,18 @@ import net.fortuna.ical4j.model.parameter.Cn;
  */
 public class Attendee {
     
-    private final String name;
-    private final String mail;
+    protected String name;
+    protected URI mail;
+    protected PartStat status;
     
-    public Attendee(String mail, String name) {
+    public Attendee(URI mail, String name) {
         this.mail=mail;
         this.name=name;
+        this.status=PartStat.NEEDS_ACTION;
     }
-
-    public final String getMail() {
+    
+    public final URI getMail() {
+        System.out.println("WARUUUUUM? "+mail);
         return mail;
     }
 
@@ -28,4 +31,31 @@ public class Attendee {
         return name;
     }
     
+    public void accepted(){
+        status = PartStat.ACCEPTED;
+    }
+    
+    public boolean hasAccepted(){
+        return status.equals(PartStat.ACCEPTED);
+    }
+    
+    public void declined(){
+        status = PartStat.DECLINED;
+    }
+    
+    public boolean hasDeclined(){
+        return status.equals(PartStat.DECLINED);
+    }
+    
+    public void tentative(){
+        status = PartStat.TENTATIVE;
+    }
+    
+    public boolean isTentative(){
+        return status.equals(PartStat.TENTATIVE);
+    }
+    
+    public boolean needsAction(){
+        return status.equals(PartStat.NEEDS_ACTION);
+    }
 }

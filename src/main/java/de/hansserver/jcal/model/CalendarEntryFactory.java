@@ -3,26 +3,28 @@
  */
 package de.hansserver.jcal.model;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
-import java.net.URISyntaxException;
+import java.text.ParseException;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import net.fortuna.ical4j.data.CalendarBuilder;
+import net.fortuna.ical4j.data.ParserException;
+import net.fortuna.ical4j.model.Calendar;
 import net.fortuna.ical4j.model.Component;
 import net.fortuna.ical4j.model.Parameter;
 import net.fortuna.ical4j.model.Property;
 import net.fortuna.ical4j.model.component.VEvent;
-import net.fortuna.ical4j.model.parameter.Cn;
 import net.fortuna.ical4j.model.parameter.PartStat;
-import net.fortuna.ical4j.model.parameter.Role;
-import net.fortuna.ical4j.model.parameter.Rsvp;
-import net.fortuna.ical4j.model.property.CalScale;
 import net.fortuna.ical4j.model.property.Method;
-import net.fortuna.ical4j.model.property.Organizer;
-import net.fortuna.ical4j.model.property.ProdId;
-import net.fortuna.ical4j.model.property.Uid;
-import net.fortuna.ical4j.model.property.Version;
+import net.fortuna.ical4j.util.CompatibilityHints;
 
 /**
  *
@@ -30,91 +32,109 @@ import net.fortuna.ical4j.model.property.Version;
  */
 public class CalendarEntryFactory {
     
+    private class CalendarEntryExt extends CalendarEntry{
+        
+        public CalendarEntryExt(
+                String uid, Attendee organizer, Date start, 
+                Date end, String summary, Calendar calendar){
+            super(uid, organizer, start, end, summary);
+            this.calendar=calendar;
+            this.event=new VEvent(
+                    calendar.getComponent(Component.VEVENT).getProperties());
+        }
+        
+    }
+    
+    private class AttendeeExt extends Attendee{
+    
+        public AttendeeExt(Property property){
+            super(URI.create(property.getValue()),"");
+            System.out.println("NULL? "+property);
+            Parameter paraName = property.getParameter(Parameter.CN);
+            if(null!=paraName)
+                this.name=paraName.getValue();
+            
+        }
+        
+        private void setStatus(PartStat status){
+            this.status=status;
+        }
+    }
+    
     private final UIDGenerator uidgenerator;
+    private final CalendarBuilder builder;
     
     public CalendarEntryFactory(UIDGenerator uidgenerator){
         this.uidgenerator=uidgenerator;
+        //Relexed Pharsing to prevent parsing errors.
+        CompatibilityHints.setHintEnabled(
+                CompatibilityHints.KEY_RELAXED_UNFOLDING, true);
+        CompatibilityHints.setHintEnabled(
+                CompatibilityHints.KEY_RELAXED_PARSING, true);
+        builder = new CalendarBuilder();
     }
     
-    private CalendarEntry createCalendar(
-            List<Component> components, List<Property> properties){
-        
-        // Create the mail calendar object.
-        CalendarEntry icsCalendar = new CalendarEntry();
-        icsCalendar.getProperties().add(new ProdId("-//Test Calendar jCal//iCal4j 1.0//EN"));
-        icsCalendar.getProperties().add(Version.VERSION_2_0);
-        icsCalendar.getProperties().add(CalScale.GREGORIAN);
-        
-        for(Iterator<Component> i = components.iterator(); i.hasNext();){
-            icsCalendar.getComponents().add(i.next());
-        }
-        
-        for(Iterator<Property> i = properties.iterator(); i.hasNext();){
-            icsCalendar.getProperties().add(i.next());
-        }
-        
-        return icsCalendar;
+    public CalendarEntry create(
+            String discription,
+            Date start,
+            Date end,
+            Attendee organizer){
+        return new CalendarEntry(
+                uidgenerator.generate(), organizer, 
+                start, end, discription);
     }
     
-    private VEvent createEvent(
-        Date start, 
-        Date end,
-        String discription,
-        Attendee organizer,
-        List<Property> properties) throws URISyntaxException{
+    public CalendarEntry create(InputStream in){
         
-         // Craete new event witch contains startdate enddate and a discription.
-        VEvent vEvent = new VEvent(
-                new net.fortuna.ical4j.model.Date(start),
-                new net.fortuna.ical4j.model.Date(end), 
-                discription);
+        CalendarEntry entry = null;
         
-        // Add a unique id.
-        vEvent.getProperties().add(new Uid(uidgenerator.generate()));
+        try {
+            // Parsig action!!
+            Calendar calendar = builder.build(in);
+            
+            // Get the main event.
+            VEvent event = new VEvent(
+                    calendar.getComponent(Component.VEVENT).getProperties());
+            
+            // Get the uid.
+            String uid = event.getProperty(Property.UID).getValue();
+            Method method = new Method(
+                    calendar.getProperty(Property.METHOD).getValue());
+            
+            Date start = new Date(new net.fortuna.ical4j.model.Date(
+                    event.getProperty(Property.DTSTART).getValue()).getTime());
+            
+            Date end = new Date(new net.fortuna.ical4j.model.Date(
+                    event.getProperty(Property.DTEND).getValue()).getTime());
+            
+            Property oProperty = event.getProperty(Property.ORGANIZER);
+            Attendee organizer = new AttendeeExt(oProperty);
+            
+            String summary = event.getProperty(Property.SUMMARY).getValue();
+            
+            entry = new CalendarEntryExt(
+                    uid, organizer, start, end, summary,calendar);
+            
+            List<Property> propAttendees = event.getProperties(Property.ATTENDEE);
+            List<Attendee> attendees = new LinkedList<Attendee>();
+            Property property;
+            for(Iterator<Property> i = propAttendees.iterator(); i.hasNext();){
+                property = i.next();
+                System.out.println("ATTENDEE "+property);
+                attendees.add(new AttendeeExt(property));
+            }
+            
+            entry.setAttendees(attendees);
+            
+        } catch (ParseException ex) {
+            Logger.getLogger(CalendarEntryFactory.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException ex) {
+            Logger.getLogger(CalendarEntryFactory.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (ParserException ex) {
+            Logger.getLogger(CalendarEntryFactory.class.getName()).log(Level.SEVERE, null, ex);
+        } 
         
-        // Create the organizer.
-        Organizer vOrganizer = new Organizer("mailto:"+organizer.getMail());
-        vOrganizer.getParameters().add(new Cn(organizer.getName()));
-        vOrganizer.getParameters().add(Role.REQ_PARTICIPANT);
-        vEvent.getProperties().add(vOrganizer);
-        
-        // Add properties
-        for(Iterator<Property> i=properties.iterator(); i.hasNext();){
-            vEvent.getProperties().add(i.next());
-        }
-        
-        return vEvent;
-    }
-    
-    public CalendarEntry createInvite(
-        Date start, 
-        Date end,
-        String discription,
-        Attendee organizer,
-        List<Attendee> attendees) throws URISyntaxException{
-        
-        List<Component> components = new LinkedList<Component>();
-        List<Property> eventProperties = new LinkedList<Property>();
-        List<Property> calendarProperties = new LinkedList<Property>();
-        
-        // Add all attendees.
-        Attendee ca;
-        net.fortuna.ical4j.model.property.Attendee vAttendee;
-        for(Iterator<Attendee> i = attendees.iterator(); i.hasNext();){
-            ca = i.next();
-            vAttendee = new net.fortuna.ical4j.model.property.Attendee(
-                    URI.create("mailto:"+ca.getMail()));
-            vAttendee.getParameters().add(new Cn(ca.getName()));
-            vAttendee.getParameters().add(Rsvp.TRUE);
-            vAttendee.getParameters().add(PartStat.NEEDS_ACTION);
-            eventProperties.add(vAttendee);
-        }
-        
-        components.add(createEvent(start, end, discription, organizer, eventProperties));
-        
-        calendarProperties.add(Method.REQUEST);
-        
-        return createCalendar(components, calendarProperties);
+        return entry;
     }
     
 }
